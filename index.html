@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My RSS Reader</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white' stroke-width='1' stroke='white'><path d='M4 19.5A2.5 2.5 0 0 1 6.5 17H20'/><path d='M6.5 2H20v15H6.5A2.5 2.5 0 0 1 4 14.5V4.5A2.5 2.5 0 0 1 6.5 2z'/></svg>">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom scrollbar for webkit browsers */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1f2937; /* gray-800 */
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563; /* gray-600 */
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280; /* gray-500 */
+        }
+        /* Basic styling for article content */
+        .article-content h1, .article-content h2, .article-content h3 {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 0.5em;
+            margin-top: 1em;
+        }
+        .article-content p {
+            margin-bottom: 1em;
+            line-height: 1.6;
+        }
+        .article-content a {
+            color: #60a5fa; /* blue-400 */
+            text-decoration: underline;
+        }
+        .article-content img, .article-content figure {
+            max-width: 100%;
+            height: auto;
+            margin: 1em 0;
+            border-radius: 0.5rem;
+        }
+        .article-content ul, .article-content ol {
+            margin-left: 1.5rem;
+            margin-bottom: 1rem;
+            list-style-position: inside;
+        }
+        .article-content li {
+             margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body class="h-full bg-gray-900 text-gray-200 font-sans antialiased">
+
+    <div id="app" class="flex h-full w-full">
+        <!-- Left Pane: Feed List -->
+        <div class="w-full md:w-2/5 lg:w-1/3 xl:w-1/4 border-r border-gray-700 flex flex-col h-full">
+            <header class="p-4 border-b border-gray-700 sticky top-0 bg-gray-900/80 backdrop-blur-sm z-10">
+                <h1 class="text-xl font-bold">My Feeds</h1>
+                <p id="last-updated" class="text-xs text-gray-400">Updating...</p>
+                <div id="feed-filters" class="mt-3 flex flex-wrap gap-2">
+                    <!-- Filter badges will be injected here -->
+                </div>
+            </header>
+            <!-- Loading State -->
+            <div id="loader" class="p-4 text-center text-gray-400">
+                <div class="flex items-center justify-center space-x-2">
+                    <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Fetching latest articles...</span>
+                </div>
+            </div>
+            <div id="feed-list" class="overflow-y-auto flex-grow">
+                <!-- Feed items will be injected here -->
+            </div>
+        </div>
+
+        <!-- Right Pane: Article Content -->
+        <div id="article-viewer" class="w-full md:w-3/5 lg:w-2/3 xl:w-3/4 overflow-y-auto h-full p-6 md:p-10">
+             <div id="article-content" class="max-w-3xl mx-auto">
+                <!-- Initial State -->
+                <div id="placeholder" class="text-center text-gray-500 h-full flex flex-col justify-center items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="mb-4"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v15H6.5A2.5 2.5 0 0 1 4 14.5V4.5A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                    <h2 class="text-xl font-semibold">Welcome to your RSS Reader</h2>
+                    <p>Select an article from the list on the left to read it.</p>
+                </div>
+                 <!-- Article content will be injected here -->
+             </div>
+        </div>
+    </div>
+
+    <script>
+        const feedListEl = document.getElementById('feed-list');
+        const articleContentEl = document.getElementById('article-content');
+        const loaderEl = document.getElementById('loader');
+        const placeholderEl = document.getElementById('placeholder');
+        const lastUpdatedEl = document.getElementById('last-updated');
+        const feedFiltersEl = document.getElementById('feed-filters');
+        
+        // List of RSS feeds provided by the user
+        const feeds = [
+            { name: 'BBC Business', url: 'http://feeds.bbci.co.uk/news/business/rss.xml' },
+            { name: 'BBC News', url: 'http://feeds.bbci.co.uk/news/rss.xml' },
+            { name: 'BBC Science', url: 'http://feeds.bbci.co.uk/news/science_and_environment/rss.xml' },
+            { name: 'BBC Tech', url: 'http://feeds.bbci.co.uk/news/technology/rss.xml' },
+            { name: 'BBC Sport', url: 'https://feeds.bbci.co.uk/sport/rss.xml' },
+            { name: 'Dynomight', url: 'https://dynomight.net/feed.xml' },
+            { name: 'Marginal Revolution', url: 'https://feeds.feedblitz.com/marginalrevolution' },
+            { name: 'Not Boring', url: 'https://www.notboring.co/feed' },
+            { name: 'WSJ Opinion', url: 'https://feeds.content.dowjones.io/public/rss/RSSWSJD' },
+            { name: 'WSJ Markets', url: 'https://feeds.content.dowjones.io/public/rss/RSSMarketsMain' },
+            { name: 'WSJ World News', url: 'https://feeds.content.dowjones.io/public/rss/RSSWorldNews' },
+            { name: 'Economist Business', url: 'https://www.economist.com/business/rss.xml' },
+            { name: 'Economist Finance', url: 'https://www.economist.com/finance-and-economics/rss.xml' },
+            { name: 'Economist Leaders', url: 'https://www.economist.com/leaders/rss.xml' },
+            { name: 'Economist Science', url: 'https://www.economist.com/science-and-technology/rss.xml' },
+            { name: 'The Verge', url: 'http://theverge.com/rss/index.xml' },
+            { name: 'Wise Readwise', url: 'https://wise.readwise.io/feed/' },
+        ];
+
+        let articles = [];
+        let currentActiveItem = null;
+        let currentFilter = 'All';
+
+        // Fetch and parse a single RSS feed
+        async function fetchFeed(feed) {
+            const { name, url } = feed;
+            // Using a CORS proxy to bypass browser restrictions
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+            try {
+                const response = await fetch(proxyUrl);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const xmlText = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(xmlText, 'application/xml');
+                
+                const feedItems = Array.from(doc.querySelectorAll('item, entry'));
+                
+                const serializer = new XMLSerializer();
+                const getArticleContent = (node) => {
+                    if (!node) return null;
+                    let content = '';
+                    // Loop through child nodes and serialize them to reconstruct the inner HTML
+                    for (const child of node.childNodes) {
+                        content += serializer.serializeToString(child);
+                    }
+                    return content;
+                };
+
+                return feedItems.map(item => {
+                    const title = item.querySelector('title')?.textContent || 'No title';
+                    const link = item.querySelector('link')?.textContent || item.querySelector('link')?.getAttribute('href') || '#';
+                    
+                    let contentNode;
+                    if (url.includes('dowjones.io')) { 
+                        contentNode = item.querySelector('description') || item.querySelector('content\\:encoded') || item.querySelector('content') || item.querySelector('summary');
+                    } else {
+                        contentNode = item.querySelector('content\\:encoded') || item.querySelector('content') || item.querySelector('description') || item.querySelector('summary');
+                    }
+                    const description = getArticleContent(contentNode) || 'No content available.';
+                    
+                    const mediaContent = item.querySelector('media\\:content');
+                    const imageUrl = mediaContent ? mediaContent.getAttribute('url') : null;
+                    
+                    const pubDateStr = item.querySelector('pubDate')?.textContent || item.querySelector('published')?.textContent || new Date().toISOString();
+                    
+                    const domain = new URL(link.startsWith('/') ? url : link).hostname;
+                    const favicon = `https://www.google.com/s2/favicons?sz=32&domain=${domain}`;
+
+                    return {
+                        source: name,
+                        title,
+                        link,
+                        description,
+                        pubDate: new Date(pubDateStr),
+                        favicon,
+                        imageUrl,
+                    };
+                });
+            } catch (error) {
+                console.error(`Failed to fetch or parse feed: ${url}`, error);
+                return []; 
+            }
+        }
+
+        async function loadAllFeeds() {
+            loaderEl.style.display = 'block';
+            feedListEl.innerHTML = ''; 
+
+            const feedPromises = feeds.map(feed => fetchFeed(feed));
+            const results = await Promise.allSettled(feedPromises);
+
+            let allArticles = results
+                .filter(result => result.status === 'fulfilled')
+                .flatMap(result => result.value);
+
+            const seen = new Set();
+            articles = allArticles.filter(article => {
+                const signature = article.title + '|' + article.link;
+                if (seen.has(signature)) {
+                    return false;
+                } else {
+                    seen.add(signature);
+                    return true;
+                }
+            });
+
+            articles.sort((a, b) => b.pubDate - a.pubDate);
+            
+            renderFeedList();
+            loaderEl.style.display = 'none';
+            lastUpdatedEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+        }
+
+        function renderFilterBadges() {
+            if (feedFiltersEl.children.length > 0) return;
+
+            const allButton = document.createElement('button');
+            allButton.textContent = 'All';
+            allButton.className = 'px-3 py-1 text-sm font-semibold rounded-full transition-colors';
+            allButton.dataset.filter = 'All';
+
+            feedFiltersEl.appendChild(allButton);
+
+            feeds.forEach(feed => {
+                const button = document.createElement('button');
+                button.textContent = feed.name;
+                button.className = 'px-3 py-1 text-sm font-semibold rounded-full transition-colors';
+                button.dataset.filter = feed.name;
+                feedFiltersEl.appendChild(button);
+            });
+
+            updateActiveFilterButton();
+
+            feedFiltersEl.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON') {
+                    currentFilter = e.target.dataset.filter;
+                    updateActiveFilterButton();
+                    renderFeedList();
+                }
+            });
+        }
+        
+        function updateActiveFilterButton() {
+            const buttons = feedFiltersEl.querySelectorAll('button');
+            buttons.forEach(button => {
+                if (button.dataset.filter === currentFilter) {
+                    button.classList.add('bg-blue-600', 'text-white');
+                    button.classList.remove('bg-gray-700', 'text-gray-300', 'hover:bg-gray-600');
+                } else {
+                    button.classList.add('bg-gray-700', 'text-gray-300', 'hover:bg-gray-600');
+                    button.classList.remove('bg-blue-600', 'text-white');
+                }
+            });
+        }
+
+        function renderFeedList() {
+            const filteredArticles = currentFilter === 'All' ? articles : articles.filter(a => a.source === currentFilter);
+
+            if (filteredArticles.length === 0) {
+                 feedListEl.innerHTML = `<div class="p-4 text-center text-gray-500">No articles found for this filter.</div>`;
+                 return;
+            }
+          
+            const fragment = document.createDocumentFragment();
+            filteredArticles.forEach((article) => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'p-4 border-b border-gray-800 cursor-pointer hover:bg-gray-800 transition-colors duration-150';
+                itemEl.dataset.id = article.link;
+
+                const timeAgo = formatTimeAgo(article.pubDate);
+
+                itemEl.innerHTML = `
+                    <div class="flex items-center gap-3 mb-1">
+                        <img src="${article.favicon}" alt="${article.source} favicon" class="w-4 h-4 rounded-sm" onerror="this.style.display='none'">
+                        <span class="text-xs font-medium text-gray-400 truncate">${article.source}</span>
+                        <span class="text-xs text-gray-500 ml-auto flex-shrink-0">${timeAgo}</span>
+                    </div>
+                    <h3 class="font-semibold text-gray-100">${article.title}</h3>
+                `;
+                fragment.appendChild(itemEl);
+            });
+            feedListEl.innerHTML = '';
+            feedListEl.appendChild(fragment);
+        }
+
+        async function displayArticle(article, itemEl) {
+            placeholderEl.style.display = 'none';
+        
+            if (currentActiveItem) {
+                currentActiveItem.classList.remove('bg-gray-700');
+            }
+            itemEl.classList.add('bg-gray-700');
+            currentActiveItem = itemEl;
+
+            const articleDate = article.pubDate.toLocaleString([], { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'});
+
+            const renderContent = (content) => {
+                 articleContentEl.innerHTML = `
+                    <h1 class="text-2xl md:text-3xl font-bold mb-2">${article.title}</h1>
+                    <div class="text-sm text-gray-400 mb-6">
+                        <span>${article.source} &bull; ${articleDate}</span>
+                    </div>
+                    <div class="article-content text-gray-300 leading-relaxed">
+                        ${content}
+                    </div>
+                    <a href="${article.link}" target="_blank" rel="noopener noreferrer" class="inline-block mt-8 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                        Read Original Article &rarr;
+                    </a>
+                `;
+            }
+
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = article.description;
+            const isSummary = tempDiv.textContent.length < 350 && !tempDiv.querySelector('p');
+
+            if (isSummary && !article.link.includes('wsj.com')) {
+                renderContent(`
+                    <div class="text-gray-400">
+                        <p>${article.description}</p>
+                        <div class="flex items-center justify-center space-x-2 mt-8">
+                            <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <span>Fetching full article content...</span>
+                        </div>
+                    </div>
+                `);
+
+                const fullArticle = await fetchAndParseArticle(article.link);
+                if (fullArticle.content) {
+                    renderContent(fullArticle.content);
+                } else {
+                    renderContent(article.description);
+                }
+            } else {
+                let finalContent = article.description;
+                if (article.link.includes('wsj.com') && article.imageUrl) {
+                    const imageHtml = `<img src="${article.imageUrl}" alt="${article.title}" class="w-full object-cover rounded-lg mb-6 max-h-96 bg-gray-800">`;
+                    finalContent = imageHtml + finalContent;
+                }
+                renderContent(finalContent);
+            }
+        }
+
+        async function fetchAndParseArticle(url) {
+            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+            try {
+                const response = await fetch(proxyUrl);
+                if (!response.ok) throw new Error('Failed to fetch article page');
+                
+                const htmlText = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlText, 'text/html');
+
+                if (url.includes('bbc.co.uk')) {
+                   setTimeout(() => cleanupBbcArticleDom(doc), 0);
+                }
+
+                const base = new URL(url);
+                doc.querySelectorAll('img[src], a[href]').forEach(el => {
+                    const attr = el.hasAttribute('src') ? 'src' : 'href';
+                    const originalUrl = el.getAttribute(attr);
+                    if (originalUrl && !originalUrl.startsWith('http') && !originalUrl.startsWith('data:')) {
+                        try {
+                           const absoluteUrl = new URL(originalUrl, base.href);
+                           el.setAttribute(attr, absoluteUrl.href);
+                        } catch(e) {
+                            console.warn(`Could not create absolute URL for: ${originalUrl}`);
+                        }
+                    }
+                });
+
+                const selectors = [ 'article', '[role="article"]', '.article-body', '.post-content', '#main-content', 'main' ];
+                let contentEl = null;
+                for (const selector of selectors) {
+                    contentEl = doc.querySelector(selector);
+                    if (contentEl) break;
+                }
+                
+                if (contentEl) {
+                     // Last ditch effort to clean BBC before returning
+                    if (url.includes('bbc.co.uk')) {
+                        const elementsToRemove = new Set();
+                        contentEl.querySelectorAll('*').forEach(el => {
+                            for (const node of el.childNodes) {
+                                if (node.nodeType === Node.TEXT_NODE && node.textContent.includes('ShareSave')) {
+                                    if(el.parentElement) elementsToRemove.add(el.parentElement);
+                                    break;
+                                }
+                            }
+                        });
+                        elementsToRemove.forEach(el => el.remove());
+                    }
+                    return { content: contentEl.innerHTML };
+                }
+
+                return { content: null };
+
+            } catch (error) {
+                console.error(`Error fetching or parsing full article from ${url}:`, error);
+                return { content: null };
+            }
+        }
+
+        function cleanupBbcArticleDom(doc) {
+            const elementsToRemove = new Set();
+            const allElements = doc.body.getElementsByTagName('*');
+            
+            for (const el of allElements) {
+                // Find the most specific element containing the text
+                let hasDirectText = false;
+                for (const node of el.childNodes) {
+                    if (node.nodeType === Node.TEXT_NODE && node.textContent.includes('ShareSave')) {
+                        hasDirectText = true;
+                        break;
+                    }
+                }
+
+                if (hasDirectText) {
+                    // Travel up to find the containing div 'component'
+                    let parent = el.closest('div');
+                    if (parent) {
+                        elementsToRemove.add(parent);
+                    }
+                }
+            }
+            elementsToRemove.forEach(el => el.remove());
+        }
+
+        function formatTimeAgo(date) {
+            const seconds = Math.floor((new Date() - date) / 1000);
+            let interval = seconds / 31536000;
+            if (interval > 1) return Math.floor(interval) + "y ago";
+            interval = seconds / 2592000;
+            if (interval > 1) return Math.floor(interval) + "m ago";
+            interval = seconds / 86400;
+            if (interval > 1) return Math.floor(interval) + "d ago";
+            interval = seconds / 3600;
+            if (interval > 1) return Math.floor(interval) + "h ago";
+            interval = seconds / 60;
+            if (interval > 1) return Math.floor(interval) + "m ago";
+            return Math.floor(seconds) + "s ago";
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderFilterBadges();
+            loadAllFeeds();
+
+            feedListEl.addEventListener('click', (e) => {
+                const item = e.target.closest('[data-id]');
+                if (item) {
+                    const articleId = item.dataset.id;
+                    const article = articles.find(a => a.link === articleId);
+                    if (article) {
+                        displayArticle(article, item);
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+

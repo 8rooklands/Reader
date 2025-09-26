@@ -52,11 +52,11 @@
         }
     </style>
 </head>
-<body class="h-full bg-gray-900 text-gray-200 font-sans antialiased">
+<body class="h-full bg-gray-900 text-gray-200 font-sans antialiased overflow-hidden">
 
     <div id="app" class="flex h-full w-full">
         <!-- Left Pane: Feed List -->
-        <div class="w-full md:w-2/5 lg:w-1/3 xl:w-1/4 border-r border-gray-700 flex flex-col h-full">
+        <div id="left-pane" class="w-full md:w-2/5 lg:w-1/3 xl:w-1/4 border-r border-gray-700 flex flex-col h-full">
             <header class="p-4 border-b border-gray-700 sticky top-0 bg-gray-900/80 backdrop-blur-sm z-10">
                 <div class="flex justify-between items-center">
                     <h1 class="text-xl font-bold">My Feeds</h1>
@@ -87,8 +87,14 @@
         </div>
 
         <!-- Right Pane: Article Content -->
-        <div id="article-viewer" class="w-full md:w-3/5 lg:w-2/3 xl:w-3/4 overflow-y-auto h-full p-6 md:p-10">
-             <div id="article-content" class="max-w-3xl mx-auto">
+        <div id="article-viewer" class="relative w-full md:w-3/5 lg:w-2/3 xl:w-3/4 overflow-y-auto h-full p-6 md:p-10">
+            <button id="toggle-pane-btn" title="Toggle article list" class="absolute top-4 left-4 z-20 p-2 rounded-full text-gray-400 hover:text-white hover:bg-gray-700">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="9" y1="3" x2="9" y2="21"></line>
+                </svg>
+            </button>
+             <div id="article-content" class="max-w-3xl mx-auto pt-12 md:pt-0">
                 <!-- Initial State -->
                 <div id="placeholder" class="text-center text-gray-500 h-full flex flex-col justify-center items-center">
                     <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="mb-4"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v15H6.5A2.5 2.5 0 0 1 4 14.5V4.5A2.5 2.5 0 0 1 6.5 2z"/></svg>
@@ -109,6 +115,9 @@
         const feedFiltersEl = document.getElementById('feed-filters');
         const toggleFiltersBtn = document.getElementById('toggle-filters-btn');
         const toggleFiltersIcon = document.getElementById('toggle-filters-icon');
+        const leftPane = document.getElementById('left-pane');
+        const articleViewer = document.getElementById('article-viewer');
+        const togglePaneBtn = document.getElementById('toggle-pane-btn');
         
         // List of RSS feeds provided by the user
         const feeds = [
@@ -308,6 +317,11 @@
             itemEl.classList.add('bg-gray-700');
             currentActiveItem = itemEl;
 
+            if (window.innerWidth < 768) {
+                leftPane.classList.add('hidden');
+                articleViewer.classList.remove('hidden');
+            }
+
             const articleDate = article.pubDate.toLocaleString([], { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit'});
 
             const renderContent = (content) => {
@@ -463,9 +477,30 @@
             renderFilterBadges();
             loadAllFeeds();
 
+            if (window.innerWidth < 768) {
+                articleViewer.classList.add('hidden');
+            }
+
             toggleFiltersBtn.addEventListener('click', () => {
                 feedFiltersEl.classList.toggle('hidden');
+                feedFiltersEl.classList.toggle('flex');
                 toggleFiltersIcon.classList.toggle('rotate-180');
+            });
+
+            togglePaneBtn.addEventListener('click', () => {
+                if (window.innerWidth < 768) {
+                    // On mobile, it acts as a back button
+                    leftPane.classList.remove('hidden');
+                    articleViewer.classList.add('hidden');
+                } else {
+                    // On desktop, it toggles visibility for more reading space
+                    const isHidden = leftPane.classList.toggle('hidden');
+                    if (isHidden) {
+                        articleViewer.classList.remove('md:w-3/5', 'lg:w-2/3', 'xl:w-3/4');
+                    } else {
+                        articleViewer.classList.add('md:w-3/5', 'lg:w-2/3', 'xl:w-3/4');
+                    }
+                }
             });
 
             feedListEl.addEventListener('click', (e) => {
@@ -482,5 +517,4 @@
     </script>
 </body>
 </html>
-
 
